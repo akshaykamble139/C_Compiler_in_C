@@ -12,6 +12,7 @@ typedef enum {
     TOKEN_KEYWORD,
     TOKEN_INTEGER,
     TOKEN_FLOAT,
+    TOKEN_CHAR_LITERAL,
     TOKEN_STRING,
     TOKEN_OPERATOR,
     TOKEN_PUNCTUATOR,
@@ -51,6 +52,7 @@ int get_token_list(Lexer* lexer);
 
 Lexer* init_lexer(char **l);
 char peek_char(Lexer* lexer);
+char peek_next_char(Lexer* lexer);
 char read_char(Lexer* lexer);
 void skip_comment(Lexer* lexer);
 Token* create_token(TokenType type, char* lexeme, int line, int column);
@@ -59,6 +61,7 @@ Token* read_identifier(Lexer* lexer);
 int is_keyword(char* lexeme);
 
 void free_resources(Lexer* lexer);
+void report_error(Lexer* lexer, char* message);
 
 
 int main(int argc, char* argv[]){
@@ -214,9 +217,8 @@ int get_token_list(Lexer* lexer) {
 
     token_list[tokens_num] = (Token*) malloc(sizeof(Token));
     token_list[tokens_num] = get_next_token(lexer);
-    while (token_list[tokens_num]->type != TOKEN_EOF) {
-        printf("inside while\n");
-        printf("Token: type=%d, lexeme='%s', line=%d, column=%d\n",
+    while (token_list[tokens_num] != NULL && token_list[tokens_num]->type != TOKEN_EOF) {
+        printf("%d Token: type=%d, lexeme=\"%s\", line=%d, column=%d\n", tokens_num,
                token_list[tokens_num]->type, token_list[tokens_num]->lexeme, 
                token_list[tokens_num]->line, token_list[tokens_num]->column);
         
@@ -234,18 +236,8 @@ int get_token_list(Lexer* lexer) {
         token_list[tokens_num+1] = (Token*) malloc(sizeof(Token));
         token_list[tokens_num+1] = get_next_token(lexer);
 
-        if (token_list[tokens_num]->lexeme == "\n") {
-            printf("bruh\n");
-        }
-
         tokens_num++;
-
-        if (tokens_num > 50) {
-            break;
-        }
     }
-
-    printf("%d\n",token_list[tokens_num]->type != TOKEN_EOF);
 
     return 0;
 }
@@ -269,19 +261,18 @@ char peek_char(Lexer* lexer) {
 
 char read_char(Lexer* lexer) {
     char c = peek_char(lexer);
-    printf("inside read_char %c %d %d %d\n", c, lexer->line, lexer->column, lexer->on_a_new_line_char);
     if (lexer->line <= size && c == '\n') {
-        printf("inside if read_char %d\n", lexer->line);
         lexer->on_a_new_line_char = 0;
         lexer->current_pos = 0;
         lexer->line++;
         lexer->column = 1;
         c = peek_char(lexer);
     }
-    
-    lexer->current_pos++;
-    lexer->column++;
-    lexer->on_a_new_line_char = c == '\n';
+    else {
+        lexer->current_pos++;
+        lexer->column++;
+        lexer->on_a_new_line_char = c == '\n';
+    }
     
     return c;
 }
@@ -293,6 +284,11 @@ Token* create_token(TokenType type, char* lexeme, int line, int column) {
     token->line = line;
     token->column = column;
     return token;
+}
+
+void report_error(Lexer* lexer, char* message) {
+    fprintf(stderr, "Lexical error at line %d, column %d: %s\n",
+            lexer->line, lexer->column, message);
 }
 
 void skip_comment(Lexer* lexer) {
@@ -352,27 +348,256 @@ Token* read_identifier(Lexer* lexer) {
     return create_token(type, lexeme, start_line, start_column);
 }
 
+Token* read_operator(Lexer* lexer) {
+    int start_pos = lexer->current_pos;
+    int start_line = lexer->line;
+    int start_column = lexer->column;
+    
+    char c1 = read_char(lexer);
+    char c2 = peek_char(lexer);
+    
+    if (c2 != '\0') {
+        char op[3] = {c1, c2, '\0'};
+        if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0 ||
+            strcmp(op, "<=") == 0 || strcmp(op, ">=") == 0 ||
+            strcmp(op, "&&") == 0 || strcmp(op, "||") == 0 ||
+            strcmp(op, "++") == 0 || strcmp(op, "--") == 0 ||
+            strcmp(op, "+=") == 0 || strcmp(op, "-=") == 0 ||
+            strcmp(op, "*=") == 0 || strcmp(op, "/=") == 0 ||
+            strcmp(op, "%=") == 0 || strcmp(op, "&=") == 0 ||
+            strcmp(op, "|=") == 0 || strcmp(op, "^=") == 0 ||
+            strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) {
+            read_char(lexer);  
+            return create_token(TOKEN_OPERATOR, op, start_line, start_column);
+        }
+    }
+    
+    if (c2 != '\0' && peek_next_char(lexer) != '\0') {
+        char op[4] = {c1, c2, peek_next_char(lexer), '\0'};
+        if (strcmp(op, "<<=") == 0 || strcmp(op, ">>=") == 0) {
+            read_char(lexer);  
+            read_char(lexer);  
+            return create_token(TOKEN_OPERATOR, op, start_line, start_column);
+        }
+    }
+    
+    char op[2] = {c1, '\0'};
+    return create_token(TOKEN_OPERATOR, op, start_line, start_column);
+}
+
 Token* read_symbols(Lexer* lexer) {
     char str[2];
     str[0] = read_char(lexer);
     str[1] = 0;
-    TokenType type = TOKEN_OPERATOR;
-    if (str[0] == '#') {
-        type = TOKEN_PREPROCESSOR_DIRECTIVE;
-    }
-    else if (strchr("(){}[];,.", str[0])) {
-        type = TOKEN_PUNCTUATOR;
-    }
-    else if (str[0] == '/') {
-        char c = peek_char(lexer);
-        if (c == '/' || c == '*') {
-            skip_comment(lexer);
-            return get_next_token(lexer);
-        }
-    }
+    TokenType type = TOKEN_PUNCTUATOR;
     
     Token* token = create_token(type, str, lexer->line, lexer->column-1);
     return token;
+}
+
+char peek_next_char(Lexer* lexer) {
+    if (lexer->current_pos + 1 >= strlen(lexer->input[lexer->line-1])) {
+        return '\0';
+    }
+    return lexer->input[lexer->line-1][lexer->current_pos + 1];
+}
+
+Token* read_number(Lexer* lexer) {
+    int start_pos = lexer->current_pos;
+    int start_line = lexer->line;
+    int start_column = lexer->column;
+    TokenType type = TOKEN_INTEGER;
+    int base = 10;
+
+    if (peek_char(lexer) == '0' && (peek_next_char(lexer) == 'x' || peek_next_char(lexer) == 'X')) {
+        read_char(lexer);  
+        read_char(lexer); 
+        base = 16;
+    }
+    else if (peek_char(lexer) == '0' && (peek_next_char(lexer) == 'b' || peek_next_char(lexer) == 'B')) {
+        read_char(lexer);  
+        read_char(lexer);  
+        base = 2;
+    }
+
+    while (1) {
+        char c = peek_char(lexer);
+        if ((base == 10 && isdigit(c)) ||
+            (base == 16 && isxdigit(c)) ||
+            (base == 2 && (c == '0' || c == '1'))) {
+            read_char(lexer);
+        } else {
+            break;
+        }
+    }
+
+    if (base == 10 && peek_char(lexer) == '.') {
+        type = TOKEN_FLOAT;
+        read_char(lexer);  
+        
+        if (!isdigit(peek_char(lexer))) {
+            report_error(lexer, "Expected digit after decimal point");
+            return NULL;
+        }
+        while (isdigit(peek_char(lexer))) {
+            read_char(lexer);
+        }
+    }
+
+    if (base == 10 && (peek_char(lexer) == 'e' || peek_char(lexer) == 'E')) {
+        type = TOKEN_FLOAT;
+        read_char(lexer);  
+        
+        if (peek_char(lexer) == '+' || peek_char(lexer) == '-') {
+            read_char(lexer);
+        }
+        
+        if (!isdigit(peek_char(lexer))) {
+            report_error(lexer, "Expected digit after exponent");
+            return NULL;
+        }
+        while (isdigit(peek_char(lexer))) {
+            read_char(lexer);
+        }
+    }
+
+    char c = peek_char(lexer);
+    if (c == 'u' || c == 'U' || c == 'l' || c == 'L' || c == 'f' || c == 'F') {
+        read_char(lexer);
+        if ((c == 'l' || c == 'L') && (peek_char(lexer) == 'l' || peek_char(lexer) == 'L')) {
+            read_char(lexer);  
+        }
+    }
+
+    size_t length = lexer->current_pos - start_pos;
+    char* lexeme = (char*)malloc(length + 1);
+    strncpy(lexeme, lexer->input[start_line-1] + start_pos, length);
+    lexeme[length] = '\0';
+
+    return create_token(type, lexeme, start_line, start_column);
+}
+
+Token* read_string(Lexer* lexer) {
+    int start_pos = lexer->current_pos;
+    int start_line = lexer->line;
+    int start_column = lexer->column;
+    
+    read_char(lexer);
+    
+    char* buffer = malloc(1024);  
+    size_t buffer_size = 1024;
+    size_t length = 0;
+    
+    while (1) {
+        char c = read_char(lexer);
+        
+        if (c == '"') {
+            break;
+        }
+        
+        if (c == '\0') {
+            report_error(lexer, "Unterminated string literal");
+            free(buffer);
+            return NULL;
+        }
+        
+        if (c == '\\') {
+            c = read_char(lexer);
+            switch (c) {
+                case 'n': c = '\n'; break;
+                case 't': c = '\t'; break;
+                case 'r': c = '\r'; break;
+                case '\\': c = '\\'; break;
+                case '"': c = '"'; break;
+                case '\'': c = '\''; break;
+                case '0': c = '\0'; break;
+                default:
+                    report_error(lexer, "Unknown escape sequence");
+                    free(buffer);
+                    return NULL;
+            }
+        }
+        
+        if (length + 1 >= buffer_size) {
+            buffer_size *= 2;
+            buffer = realloc(buffer, buffer_size);
+            if (!buffer) {
+                report_error(lexer, "Memory allocation failed");
+                return NULL;
+            }
+        }
+        
+        buffer[length++] = c;
+    }
+    
+    buffer[length] = '\0';  
+    
+    Token* token = create_token(TOKEN_STRING, buffer, start_line, start_column);
+    
+    free(buffer);  
+    
+    return token;
+}
+
+Token* read_char_literal(Lexer* lexer) {
+    int start_pos = lexer->current_pos;
+    int start_line = lexer->line;
+    int start_column = lexer->column;
+    
+    read_char(lexer);
+    
+    char value;
+    
+    if (peek_char(lexer) == '\\') {
+        read_char(lexer); 
+        char c = read_char(lexer);
+        switch (c) {
+            case 'n': value = '\n'; break;
+            case 't': value = '\t'; break;
+            case 'r': value = '\r'; break;
+            case '0': value = '\0'; break;
+            case '\\': value = '\\'; break;
+            case '\'': value = '\''; break;
+            case '"': value = '"'; break;
+            case 'x': {
+                char hex[3] = {0};
+                hex[0] = read_char(lexer);
+                hex[1] = read_char(lexer);
+                value = (char)strtol(hex, NULL, 16);
+                break;
+            }
+            default:
+                report_error(lexer, "Unknown escape sequence in character literal");
+                return NULL;
+        }
+    } else {
+        value = read_char(lexer);
+    }
+    
+    if (read_char(lexer) != '\'') {
+        report_error(lexer, "Unterminated character literal");
+        return NULL;
+    }
+    
+    char lexeme[4] = {'\'', value, '\'', '\0'};
+    return create_token(TOKEN_CHAR_LITERAL, lexeme, start_line, start_column);
+}
+
+Token* read_preprocessor_directive(Lexer* lexer) {
+    int start_pos = lexer->current_pos;
+    int start_line = lexer->line;
+    int start_column = lexer->column;
+    
+    while (peek_char(lexer) != '\n' && peek_char(lexer) != '\0') {
+        read_char(lexer);
+    }
+    
+    size_t length = lexer->current_pos - start_pos;
+    char* lexeme = (char*)malloc(length + 1);
+    strncpy(lexeme, lexer->input[start_line-1] + start_pos, length);
+    lexeme[length] = '\0';
+    
+    return create_token(TOKEN_PREPROCESSOR_DIRECTIVE, lexeme, start_line, start_column);
 }
 
 Token* get_next_token(Lexer* lexer) {
@@ -388,14 +613,47 @@ Token* get_next_token(Lexer* lexer) {
             continue;
         }
 
+        if (c == '/') {
+            if (peek_next_char(lexer) == '/' || peek_next_char(lexer) == '*') {
+                read_char(lexer);  
+                skip_comment(lexer);
+                continue;  
+            } else {
+                return read_symbols(lexer);
+            }
+        }
+
         if (isalpha(c) || c == '_') {
             return read_identifier(lexer);
         }
 
-        if (strchr("#+-*/=<>!&|^%(){}[];,.", c)) {
+        if (isdigit(c)) {
+            return read_number(lexer);
+        }
+
+        if (c == '\'') {
+            return read_char_literal(lexer);
+        }
+
+        if (c == '"') {
+            return read_string(lexer);
+        }
+
+        if (c == '#') {
+            return read_preprocessor_directive(lexer);
+        }
+
+        if (strchr("+-*/%=<>!&|^~?", c)) {
+            Token* op_token = read_operator(lexer);
+            if (op_token) {
+                return op_token;
+            }
+        }
+
+        if (strchr("(){}[]:;,.", c)) {
             return read_symbols(lexer);
         }
 
-        return create_token(TOKEN_OPERATOR, "", lexer->line, lexer->column);
+        return NULL;
     }
 }
