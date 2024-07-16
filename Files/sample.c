@@ -1,104 +1,147 @@
 #include <stdio.h>
 #include <stdlib.h>
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#include <string.h>
+
+#define MAX_BUFFER 1024
 #define SQUARE(x) ((x) * (x))
+#define DEBUG_PRINT(x) printf("Debug: %s = %d\n", #x, x)
 
-/* This is a multi-line comment
-   with multiple lines */
-
-// Single-line comment
-
+// Complex number structure
 typedef struct {
-    int x;
-    float y;
-} Point;
+    double real;
+    double imag;
+} Complex;
 
-enum Color {
-    RED = 0xFF0000,
-    GREEN = 0x00FF00,
-    BLUE = 0x0000FF
+// Function prototypes
+Complex add_complex(Complex a, Complex b);
+void print_complex(Complex c);
+
+// Global variables
+int global_var = 42;
+const char* global_string = "Global string";
+
+// Enum definition
+enum Colors {
+    RED,
+    GREEN,
+    BLUE
 };
 
-int global_var = 42;
-
-float calculate_distance(Point p1, Point p2) {
-    return sqrt(SQUARE(p2.x - p1.x) + SQUARE(p2.y - p1.y));
-}
+// Union definition
+union Data {
+    int i;
+    float f;
+    char str[20];
+};
 
 int main(int argc, char *argv[]) {
-    const char *message = "Hello, \"World\"!\n";
-    printf("%s", message);
-
-    // Different number representations
-    int decimal = 12345;
-    int octal = 0755;
-    int hex = 0xABCDEF;
-    float f1 = 3.14159f;
-    double d1 = 2.71828e-10;
-
-    // Bitwise operations
-    int a = 0b1010 & 0b1100;
-    int b = 0xFF | 0x0F;
-    int c = ~0xA5;
-
-    // Character literals
-    char newline = '\n';
-    char backslash = '\\';
-    char single_quote = '\'';
-
-    // Pointer arithmetic and dereference
-    int *ptr = &global_var;
-    *ptr += 5;
-
-    // Array declaration and initialization
-    int numbers[] = {1, 2, 3, 4, 5};
+    // Local variables
+    int x = 10, y = 20;
+    float pi = 3.14159f;
+    char c = 'A';
+    char str[] = "Hello, World!";
     
-    // For loop with compound assignment
-    for (int i = 0; i < 5; i++) {
-        numbers[i] *= 2;
+    // Pointer declaration and initialization
+    int *ptr = &x;
+    
+    // Array declaration
+    int arr[5] = {1, 2, 3, 4, 5};
+    
+    // Conditional statements
+    if (x < y) {
+        printf("x is less than y\n");
+    } else if (x > y) {
+        printf("x is greater than y\n");
+    } else {
+        printf("x is equal to y\n");
     }
-
+    
     // Switch statement
-    enum Color color = GREEN;
+    enum Colors color = GREEN;
     switch (color) {
         case RED:
-            printf("The color is red\n");
+            printf("Color is red\n");
             break;
         case GREEN:
-            printf("The color is green\n");
+            printf("Color is green\n");
             break;
         case BLUE:
-            printf("The color is blue\n");
+            printf("Color is blue\n");
             break;
         default:
             printf("Unknown color\n");
     }
-
-    // Do-while loop
-    int count = 0;
+    
+    // Loops
+    for (int i = 0; i < 5; i++) {
+        printf("%d ", arr[i]);
+    }
+    printf("\n");
+    
+    int j = 0;
+    while (j < 3) {
+        printf("While loop iteration %d\n", j++);
+    }
+    
     do {
-        count++;
-    } while (count < 5);
-
+        printf("Do-while loop iteration\n");
+    } while (0);
+    
+    // Function call
+    Complex a = {1.0, 2.0};
+    Complex b = {3.0, 4.0};
+    Complex result = add_complex(a, b);
+    print_complex(result);
+    
+    // Macro usage
+    int squared = SQUARE(5);
+    DEBUG_PRINT(squared);
+    
+    // Bitwise operations
+    int bitwise_and = 0b1010 & 0b1100;
+    int bitwise_or = 0b1010 | 0b1100;
+    int bitwise_xor = 0b1010 ^ 0b1100;
+    int bitwise_not = ~0b1010;
+    
     // Ternary operator
-    int max = (argc > 1) ? atoi(argv[1]) : 10;
+    int max = (x > y) ? x : y;
+    
+    // Memory allocation
+    char *dynamic_str = (char *)malloc(MAX_BUFFER * sizeof(char));
+    if (dynamic_str != NULL) {
+        strcpy(dynamic_str, "Dynamically allocated string");
+        printf("%s\n", dynamic_str);
+        free(dynamic_str);
+    }
+    
+    // Union usage
+    union Data data;
+    data.i = 10;
+    printf("data.i: %d\n", data.i);
+    data.f = 220.5f;
+    printf("data.f: %.2f\n", data.f);
+    strcpy(data.str, "C Programming");
+    printf("data.str: %s\n", data.str);
+    
+    // Hexadecimal and octal literals
+    int hex_num = 0xFF;
+    int oct_num = 0755;
+    
+    // Character and string escape sequences
+    printf("Newline\nTab\tBackslash\\\n");
+    printf("Unicode character: \u03C0\n");
+    
+    return 0;
+}
 
-    // Function pointer
-    float (*dist_func)(Point, Point) = &calculate_distance;
+// Function definitions
+Complex add_complex(Complex a, Complex b) {
+    Complex result;
+    result.real = a.real + b.real;
+    result.imag = a.imag + b.imag;
+    return result;
+}
 
-    Point p1 = {.x = 0, .y = 0};
-    Point p2 = {.x = 3, .y = 4};
-    printf("Distance: %f\n", dist_func(p1, p2));
-
-    // Sizeof operator
-    size_t size = sizeof(Point);
-
-    // Comma operator
-    int x = 1, y = 2, z = 3;
-
-    // Preprocessor stringification
-    #define PRINT_VAR(var) printf(#var " = %d\n", var)
-    PRINT_VAR(x);
-
-    return EXIT_SUCCESS;
+void print_complex(Complex c) {
+    printf("%.2f + %.2fi\n", c.real, c.imag);
 }
